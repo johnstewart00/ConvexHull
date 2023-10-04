@@ -85,7 +85,7 @@ class ConvexHullSolver(QObject):
             polygon = []
             if n == 1:
                 polygon.append(QLineF(points[0], points[0]))
-            if n == 2:
+            elif n == 2:
                 polygon.append(QLineF(points[0], points[1]))
             else:
                 for i in range(n):
