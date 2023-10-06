@@ -108,8 +108,8 @@ class ConvexHullSolver(QObject):
 
     def mergePolygons(self, left_polygon, right_polygon):
         convex = []
-        leftPolygonPoints = self.getPoints(left_polygon)
-        rightPolygonPoints = self.getPoints(right_polygon)
+        # leftPolygonPoints = self.getPoints(left_polygon)
+        # rightPolygonPoints = self.getPoints(right_polygon)
 
         # give convex the entire two polygons
         for i in range(len(left_polygon)):
@@ -121,14 +121,14 @@ class ConvexHullSolver(QObject):
                 continue
             convex.append(right_polygon[i])
 
-        leftVertex = leftPolygonPoints[0]
-        for i in range(len(leftPolygonPoints)):
-            if leftPolygonPoints[i].x() > leftVertex.x():
-                leftVertex = leftPolygonPoints[i]
-        rightVertex = rightPolygonPoints[0]
-        for i in range(len(rightPolygonPoints)):
-            if rightPolygonPoints[i].x() < rightVertex.x():
-                rightVertex = rightPolygonPoints[i]
+        leftVertex = left_polygon[0].p1()
+        for i in range(len(left_polygon)):
+            if left_polygon[i].p1().x() > leftVertex.x():
+                leftVertex = left_polygon[i].p1()
+        rightVertex = right_polygon[0].p1()
+        for i in range(len(right_polygon)):
+            if right_polygon[i].p1().x() < rightVertex.x():
+                rightVertex = right_polygon[i].p1()
 
         # Calculate the slope
         slope = self.calculateSlope(leftVertex, rightVertex)
@@ -138,7 +138,6 @@ class ConvexHullSolver(QObject):
         slopeCopy = slope
         # get the top of the right polygon
         rightVertexCopy, didChange, slopeCopy, convex = self.getTopOfRightPolygon(
-            len(rightPolygonPoints),
             rightVertexCopy,
             leftVertexCopy,
             slopeCopy,
@@ -147,7 +146,6 @@ class ConvexHullSolver(QObject):
         )
         # get the top of the left polygon
         leftVertexCopy, didChange, slopeCopy, convex = self.getTopOfLeftPolygon(
-            len(leftPolygonPoints),
             leftVertexCopy,
             rightVertexCopy,
             slopeCopy,
@@ -156,7 +154,6 @@ class ConvexHullSolver(QObject):
         )
         while didChange:
             rightVertexCopy, didChange, slopeCopy, convex = self.getTopOfRightPolygon(
-                len(rightPolygonPoints),
                 rightVertexCopy,
                 leftVertexCopy,
                 slopeCopy,
@@ -164,7 +161,6 @@ class ConvexHullSolver(QObject):
                 right_polygon,
             )
             leftVertexCopy, didChange, slopeCopy, convex = self.getTopOfLeftPolygon(
-                len(leftPolygonPoints),
                 leftVertexCopy,
                 rightVertexCopy,
                 slopeCopy,
@@ -176,7 +172,6 @@ class ConvexHullSolver(QObject):
         # get the lower tangent
         # get the bottom of the right polygon
         rightVertex, didChange, slope, convex = self.getBottomOfRightPolygon(
-            len(rightPolygonPoints),
             rightVertex,
             leftVertex,
             slope,
@@ -185,11 +180,10 @@ class ConvexHullSolver(QObject):
         )
         # get the bottom of the left polygon
         leftVertex, didChange, slope, convex = self.getBottomOfLeftPolygon(
-            len(leftPolygonPoints), leftVertex, rightVertex, slope, convex, left_polygon
+            leftVertex, rightVertex, slope, convex, left_polygon
         )
         while didChange:
             rightVertex, didChange, slope, convex = self.getBottomOfRightPolygon(
-                len(rightPolygonPoints),
                 rightVertex,
                 leftVertex,
                 slope,
@@ -197,7 +191,6 @@ class ConvexHullSolver(QObject):
                 right_polygon,
             )
             leftVertex, didChange, slope, convex = self.getBottomOfLeftPolygon(
-                len(leftPolygonPoints),
                 leftVertex,
                 rightVertex,
                 slope,
@@ -222,7 +215,6 @@ class ConvexHullSolver(QObject):
 
     def getTopOfRightPolygon(
         self,
-        numPoints,
         rightVertexCopy,
         leftVertexCopy,
         slopeCopy,
@@ -230,7 +222,8 @@ class ConvexHullSolver(QObject):
         rightPolygon,
     ):
         didChange = False
-        for _ in range(numPoints):
+        goAgain = True
+        while goAgain:
             newRight = None
             for line in rightPolygon:
                 if line.p1() == rightVertexCopy:
@@ -242,11 +235,13 @@ class ConvexHullSolver(QObject):
                 rightVertexCopy = newRight
                 slopeCopy = newSlope
                 didChange = True
+                goAgain = True
+            else:
+                goAgain = False
         return rightVertexCopy, didChange, slopeCopy, convex
 
     def getTopOfLeftPolygon(
         self,
-        numPoints,
         leftVertexCopy,
         rightVertexCopy,
         slopeCopy,
@@ -254,7 +249,8 @@ class ConvexHullSolver(QObject):
         leftPolygon,
     ):
         didChange = False
-        for _ in range(numPoints):
+        goAgain = True
+        while goAgain:
             newLeft = None
             for line in leftPolygon:
                 if line.p2() == leftVertexCopy:
@@ -266,13 +262,17 @@ class ConvexHullSolver(QObject):
                 leftVertexCopy = newLeft
                 slopeCopy = newSlope
                 didChange = True
+                goAgain = True
+            else:
+                goAgain = False
         return leftVertexCopy, didChange, slopeCopy, convex
 
     def getBottomOfRightPolygon(
-        self, numPoints, rightVertex, leftVertex, slope, convex, rightPolygon
+        self, rightVertex, leftVertex, slope, convex, rightPolygon
     ):
         didChange = False
-        for _ in range(numPoints):
+        goAgain = True
+        while goAgain:
             newRight = None
             for line in rightPolygon:
                 if line.p2() == rightVertex:
@@ -284,13 +284,17 @@ class ConvexHullSolver(QObject):
                 rightVertex = newRight
                 slope = newSlope
                 didChange = True
+                goAgain = True
+            else:
+                goAgain = False
         return rightVertex, didChange, slope, convex
 
     def getBottomOfLeftPolygon(
-        self, numPoints, leftVertex, rightVertex, slope, convex, leftPolygon
+        self, leftVertex, rightVertex, slope, convex, leftPolygon
     ):
         didChange = False
-        for _ in range(numPoints):
+        goAgain = True
+        while goAgain:
             newLeft = None
             for line in leftPolygon:
                 if line.p1() == leftVertex:
@@ -302,6 +306,9 @@ class ConvexHullSolver(QObject):
                 leftVertex = newLeft
                 slope = newSlope
                 didChange = True
+                goAgain = True
+            else:
+                goAgain = False
         return leftVertex, didChange, slope, convex
 
     def deleteLine(self, point1, point2, convex):
@@ -318,19 +325,3 @@ class ConvexHullSolver(QObject):
         delta_x = rightVertex.x() - leftVertex.x()
         delta_y = rightVertex.y() - leftVertex.y()
         return delta_y / delta_x
-
-    def getPoints(self, polygon):
-        points = []
-        for i in range(len(polygon)):
-            if polygon[i].p1() in points:
-                if polygon[i].p2() in points:
-                    continue
-                else:
-                    points.append(polygon[i].p2())
-                    continue
-            points.append(polygon[i].p1())
-            if polygon[i].p2() in points:
-                continue
-            else:
-                points.append(polygon[i].p2())
-        return points
