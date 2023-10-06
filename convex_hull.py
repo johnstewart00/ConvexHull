@@ -18,7 +18,7 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 
 # Global variable that controls the speed of the recursion automation, in seconds
-PAUSE = 0.25
+PAUSE = 1
 
 
 #
@@ -66,7 +66,6 @@ class ConvexHullSolver(QObject):
         t1 = time.time()
         # TODO: SORT THE POINTS BY INCREASING X-VALUE
         sorted_points = sorted(points, key=lambda point: point.x())
-        # print("sorted points: ", sorted_points)
         t2 = time.time()
 
         t3 = time.time()
@@ -87,59 +86,39 @@ class ConvexHullSolver(QObject):
                 polygon.append(QLineF(points[0], points[0]))
             elif n == 2:
                 polygon.append(QLineF(points[0], points[1]))
+                polygon.append(QLineF(points[1], points[0]))
             else:
-                for i in range(n):
-                    if i == 2:
-                        polygon.append(QLineF(points[i], points[0]))
-                    else:
-                        polygon.append(QLineF(points[i], points[i + 1]))
+                if self.calculateSlope(points[0], points[1]) > self.calculateSlope(
+                    points[0], points[2]
+                ):
+                    polygon.append(QLineF(points[0], points[1]))
+                    polygon.append(QLineF(points[1], points[2]))
+                    polygon.append(QLineF(points[2], points[0]))
+                else:
+                    polygon.append(QLineF(points[0], points[2]))
+                    polygon.append(QLineF(points[2], points[1]))
+                    polygon.append(QLineF(points[1], points[0]))
             return polygon
 
         left = points[: n // 2]
         right = points[n // 2 :]
         left_polygon = self.convexHullWrapper(left)
         right_polygon = self.convexHullWrapper(right)
-        print("left polygon size is: ", len(left_polygon))
-        print("right polygon size is: ", len(right_polygon))
         return self.mergePolygons(left_polygon, right_polygon)
 
     def mergePolygons(self, left_polygon, right_polygon):
         convex = []
-        leftPolygonPoints = []
-        rightPolygonPoints = []
-
-        # get all points from the left polygon
-        for i in range(len(left_polygon)):
-            if left_polygon[i].p1() in leftPolygonPoints:
-                if left_polygon[i].p2() in leftPolygonPoints:
-                    continue
-                else:
-                    leftPolygonPoints.append(left_polygon[i].p2())
-                    continue
-            leftPolygonPoints.append(left_polygon[i].p1())
-            if left_polygon[i].p2() in leftPolygonPoints:
-                continue
-            else:
-                leftPolygonPoints.append(left_polygon[i].p2())
-
-        # get all points from the right polygon
-        for i in range(len(right_polygon)):
-            if right_polygon[i].p1() in rightPolygonPoints:
-                if right_polygon[i].p2() in rightPolygonPoints:
-                    continue
-                else:
-                    rightPolygonPoints.append(right_polygon[i].p2())
-                    continue
-            rightPolygonPoints.append(right_polygon[i].p1())
-            if right_polygon[i].p2() in rightPolygonPoints:
-                continue
-            else:
-                rightPolygonPoints.append(right_polygon[i].p2())
+        leftPolygonPoints = self.getPoints(left_polygon)
+        rightPolygonPoints = self.getPoints(right_polygon)
 
         # give convex the entire two polygons
         for i in range(len(left_polygon)):
+            if left_polygon[i] in convex:
+                continue
             convex.append(left_polygon[i])
         for i in range(len(right_polygon)):
+            if right_polygon[i] in convex:
+                continue
             convex.append(right_polygon[i])
 
         leftVertex = leftPolygonPoints[0]
@@ -151,139 +130,207 @@ class ConvexHullSolver(QObject):
             if rightPolygonPoints[i].x() < rightVertex.x():
                 rightVertex = rightPolygonPoints[i]
 
-        print("leftVertex is: ", leftVertex)
-        print("rightVertex is: ", rightVertex)
-
-        delta_x = rightVertex.x() - leftVertex.x()
-        delta_y = rightVertex.y() - leftVertex.y()
-
         # Calculate the slope
-        slope = delta_y / delta_x
-        print(slope)
-
+        slope = self.calculateSlope(leftVertex, rightVertex)
         # get the upper tangent
         leftVertexCopy = leftVertex
         rightVertexCopy = rightVertex
         slopeCopy = slope
         # get the top of the right polygon
-        rightVertexCopy, didChange, slopeCopy = self.getTopOfRightPolygon(
-            rightPolygonPoints, rightVertexCopy, leftVertexCopy, slopeCopy
+        rightVertexCopy, didChange, slopeCopy, convex = self.getTopOfRightPolygon(
+            len(rightPolygonPoints),
+            rightVertexCopy,
+            leftVertexCopy,
+            slopeCopy,
+            convex,
+            right_polygon,
         )
-        print("top of right polygon is: ", rightVertex)
         # get the top of the left polygon
-        leftVertexCopy, didChange, slopeCopy = self.getTopOfLeftPolygon(
-            leftPolygonPoints, leftVertexCopy, rightVertexCopy, slopeCopy
+        leftVertexCopy, didChange, slopeCopy, convex = self.getTopOfLeftPolygon(
+            len(leftPolygonPoints),
+            leftVertexCopy,
+            rightVertexCopy,
+            slopeCopy,
+            convex,
+            left_polygon,
         )
-        print("top of left polygon is: ", leftVertexCopy)
         while didChange:
-            rightVertexCopy, didChange, slopeCopy = self.getTopOfRightPolygon(
-                rightPolygonPoints, rightVertexCopy, leftVertexCopy, slopeCopy
+            rightVertexCopy, didChange, slopeCopy, convex = self.getTopOfRightPolygon(
+                len(rightPolygonPoints),
+                rightVertexCopy,
+                leftVertexCopy,
+                slopeCopy,
+                convex,
+                right_polygon,
             )
-            leftVertexCopy, didChange, slopeCopy = self.getTopOfLeftPolygon(
-                leftPolygonPoints, leftVertexCopy, rightVertexCopy, slopeCopy
+            leftVertexCopy, didChange, slopeCopy, convex = self.getTopOfLeftPolygon(
+                len(leftPolygonPoints),
+                leftVertexCopy,
+                rightVertexCopy,
+                slopeCopy,
+                convex,
+                left_polygon,
             )
-        print("the upper tangent should be: ", leftVertexCopy, " ", rightVertexCopy)
-        convex.append(QLineF(leftVertexCopy, rightVertexCopy))
+        upperTangent = QLineF(leftVertexCopy, rightVertexCopy)
 
         # get the lower tangent
         # get the bottom of the right polygon
-        rightVertex, didChange, slope = self.getBottomOfRightPolygon(
-            rightPolygonPoints, rightVertex, leftVertex, slope
+        rightVertex, didChange, slope, convex = self.getBottomOfRightPolygon(
+            len(rightPolygonPoints),
+            rightVertex,
+            leftVertex,
+            slope,
+            convex,
+            right_polygon,
         )
         # get the bottom of the left polygon
-        leftVertex, didChange, slope = self.getBottomOfLeftPolygon(
-            leftPolygonPoints, leftVertex, rightVertex, slope
+        leftVertex, didChange, slope, convex = self.getBottomOfLeftPolygon(
+            len(leftPolygonPoints), leftVertex, rightVertex, slope, convex, left_polygon
         )
         while didChange:
-            rightVertex, didChange, slope = self.getBottomOfRightPolygon(
-                rightPolygonPoints, rightVertex, leftVertex, slope
+            rightVertex, didChange, slope, convex = self.getBottomOfRightPolygon(
+                len(rightPolygonPoints),
+                rightVertex,
+                leftVertex,
+                slope,
+                convex,
+                right_polygon,
             )
-            leftVertex, didChange, slope = self.getBottomOfLeftPolygon(
-                leftPolygonPoints, leftVertex, rightVertex, slope
+            leftVertex, didChange, slope, convex = self.getBottomOfLeftPolygon(
+                len(leftPolygonPoints),
+                leftVertex,
+                rightVertex,
+                slope,
+                convex,
+                left_polygon,
             )
-        print("bottom of right polygon is: ", rightVertex)
-        print("bottom of left polygon is: ", leftVertex)
+        lowerTangent = QLineF(rightVertex, leftVertex)
 
-        print("the lower tangent should be: ", leftVertex, " ", rightVertex)
-        convex.append(QLineF(leftVertex, rightVertex))
+        # find the right plave to add the  upper tangent
+        upperIndex = 0
+        for i in range(len(convex)):
+            if convex[i].p2() == upperTangent.p1():
+                upperIndex = i
+        convex.insert(upperIndex + 1, upperTangent)
+        lowerIndex = 0
+        for i in range(len(convex)):
+            if convex[i].p2() == lowerTangent.p1():
+                lowerIndex = i
+        convex.insert(lowerIndex + 1, lowerTangent)
 
-        # remove lines inbetween the two tangents
         return convex
 
     def getTopOfRightPolygon(
-        self, rightPolygonPoints, rightVertexCopy, leftVertexCopy, slopeCopy
+        self,
+        numPoints,
+        rightVertexCopy,
+        leftVertexCopy,
+        slopeCopy,
+        convex,
+        rightPolygon,
     ):
         didChange = False
-        for a in range(len(rightPolygonPoints)):
-            newRight = rightPolygonPoints[a]
-            if newRight == rightVertexCopy:
-                continue
-            delta_x = newRight.x() - leftVertexCopy.x()
-            delta_y = newRight.y() - leftVertexCopy.y()
-            newSlope = delta_y / delta_x
+        for _ in range(numPoints):
+            newRight = None
+            for line in rightPolygon:
+                if line.p1() == rightVertexCopy:
+                    newRight = line.p2()
+                    break
+            newSlope = self.calculateSlope(newRight, leftVertexCopy)
             if newSlope > slopeCopy:
+                convex = self.deleteLine(rightVertexCopy, newRight, convex)
                 rightVertexCopy = newRight
                 slopeCopy = newSlope
                 didChange = True
-            elif newSlope == slopeCopy:
-                if newRight.y() > rightVertexCopy.y():
-                    rightVertexCopy = newRight
-        return rightVertexCopy, didChange, slopeCopy
+        return rightVertexCopy, didChange, slopeCopy, convex
 
     def getTopOfLeftPolygon(
-        self, leftPolygonPoints, leftVertexCopy, rightVertexCopy, slopeCopy
+        self,
+        numPoints,
+        leftVertexCopy,
+        rightVertexCopy,
+        slopeCopy,
+        convex,
+        leftPolygon,
     ):
         didChange = False
-        for b in range(len(leftPolygonPoints)):
-            newLeft = leftPolygonPoints[b]
-            if newLeft == leftVertexCopy:
-                continue
-            delta_x = rightVertexCopy.x() - newLeft.x()
-            delta_y = rightVertexCopy.y() - newLeft.y()
-            newSlope = delta_y / delta_x
+        for _ in range(numPoints):
+            newLeft = None
+            for line in leftPolygon:
+                if line.p2() == leftVertexCopy:
+                    newLeft = line.p1()
+                    break
+            newSlope = self.calculateSlope(rightVertexCopy, newLeft)
             if newSlope < slopeCopy:
+                convex = self.deleteLine(newLeft, leftVertexCopy, convex)
                 leftVertexCopy = newLeft
                 slopeCopy = newSlope
                 didChange = True
-            elif newSlope == slopeCopy:
-                if newLeft.y() > leftVertexCopy.y():
-                    leftVertexCopy = newLeft
-        return leftVertexCopy, didChange, slopeCopy
+        return leftVertexCopy, didChange, slopeCopy, convex
 
     def getBottomOfRightPolygon(
-        self, rightPolygonPoints, rightVertex, leftVertex, slope
+        self, numPoints, rightVertex, leftVertex, slope, convex, rightPolygon
     ):
         didChange = False
-        for c in range(len(rightPolygonPoints)):
-            newRight = rightPolygonPoints[c]
-            if newRight == rightVertex:
-                continue
-            delta_x = newRight.x() - leftVertex.x()
-            delta_y = newRight.y() - leftVertex.y()
-            newSlope = delta_y / delta_x
+        for _ in range(numPoints):
+            newRight = None
+            for line in rightPolygon:
+                if line.p2() == rightVertex:
+                    newRight = line.p1()
+                    break
+            newSlope = self.calculateSlope(newRight, leftVertex)
             if newSlope < slope:
+                convex = self.deleteLine(newRight, rightVertex, convex)
                 rightVertex = newRight
                 slope = newSlope
                 didChange = True
-            elif newSlope == slope:
-                if newRight.y() < rightVertex.y():
-                    rightVertex = newRight
-        return rightVertex, didChange, slope
+        return rightVertex, didChange, slope, convex
 
-    def getBottomOfLeftPolygon(self, leftPolygonPoints, leftVertex, rightVertex, slope):
+    def getBottomOfLeftPolygon(
+        self, numPoints, leftVertex, rightVertex, slope, convex, leftPolygon
+    ):
         didChange = False
-        for d in range(len(leftPolygonPoints)):
-            newLeft = leftPolygonPoints[d]
-            if newLeft == leftVertex:
-                continue
-            delta_x = rightVertex.x() - newLeft.x()
-            delta_y = rightVertex.y() - newLeft.y()
-            newSlope = delta_y / delta_x
+        for _ in range(numPoints):
+            newLeft = None
+            for line in leftPolygon:
+                if line.p1() == leftVertex:
+                    newLeft = line.p2()
+                    break
+            newSlope = self.calculateSlope(rightVertex, newLeft)
             if newSlope > slope:
+                convex = self.deleteLine(leftVertex, newLeft, convex)
                 leftVertex = newLeft
                 slope = newSlope
                 didChange = True
-            elif newSlope == slope:
-                if newLeft.y() < leftVertex.y():
-                    leftVertex = newLeft
-        return leftVertex, didChange, slope
+        return leftVertex, didChange, slope, convex
+
+    def deleteLine(self, point1, point2, convex):
+        for i in range(len(convex)):
+            if convex[i].p1() == point1 and convex[i].p2() == point2:
+                self.eraseTangent([convex[i]])
+                del convex[i]
+                return convex
+
+        print("we should never be here")
+        return convex
+
+    def calculateSlope(self, rightVertex, leftVertex):
+        delta_x = rightVertex.x() - leftVertex.x()
+        delta_y = rightVertex.y() - leftVertex.y()
+        return delta_y / delta_x
+
+    def getPoints(self, polygon):
+        points = []
+        for i in range(len(polygon)):
+            if polygon[i].p1() in points:
+                if polygon[i].p2() in points:
+                    continue
+                else:
+                    points.append(polygon[i].p2())
+                    continue
+            points.append(polygon[i].p1())
+            if polygon[i].p2() in points:
+                continue
+            else:
+                points.append(polygon[i].p2())
+        return points
